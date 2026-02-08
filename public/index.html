@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Fuel Bill Generator - Generate multiple fuel bills with customizable parameters">
+    <title>Fuel Bill Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⛽ Fuel Bill Generator</h1>
+            <p class="subtitle">Generate multiple fuel bills quickly and easily</p>
+        </header>
+
+        <main>
+            <form id="billGeneratorForm">
+                <!-- Station Details Section -->
+                <section class="form-section">
+                    <h2>Station Details</h2>
+                    <div class="form-group">
+                        <label for="stationName">Fuel Station Name *</label>
+                        <input type="text" id="stationName" name="stationName" required placeholder="Enter station name">
+                    </div>
+                    <div class="form-group">
+                        <label for="fuelRate">Fuel Rate (per liter) *</label>
+                        <input type="number" id="fuelRate" name="fuelRate" step="0.01" min="0.01" required placeholder="e.g., 95.50">
+                    </div>
+                </section>
+
+                <!-- Bill Generation Settings Section -->
+                <section class="form-section">
+                    <h2>Bill Generation Settings</h2>
+                    <div class="form-group">
+                        <label for="template">Template *</label>
+                        <select id="template" name="template" required>
+                            <option value="">Select a template</option>
+                            <option value="1">Template 1</option>
+                            <option value="2">Template 2</option>
+                            <option value="3">Template 3</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="totalAmount">Total Amount (₹) *</label>
+                        <input type="number" id="totalAmount" name="totalAmount" step="0.01" min="0.01" required placeholder="e.g., 5000.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="numberOfBills">Number of Bills *</label>
+                        <input type="number" id="numberOfBills" name="numberOfBills" min="1" required placeholder="e.g., 10">
+                    </div>
+                    <div class="form-group">
+                        <label for="maxAmountPerBill">Max Amount Per Bill (₹) *</label>
+                        <input type="number" id="maxAmountPerBill" name="maxAmountPerBill" step="0.01" min="0.01" required placeholder="e.g., 1000.00">
+                    </div>
+                </section>
+
+                <!-- Date Range Section -->
+                <section class="form-section">
+                    <h2>Date Range</h2>
+                    <div class="form-group">
+                        <label for="startDate">Start Date *</label>
+                        <input type="date" id="startDate" name="startDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="endDate">End Date *</label>
+                        <input type="date" id="endDate" name="endDate" required>
+                    </div>
+                </section>
+
+                <!-- Error Messages -->
+                <div id="errorMessages" class="error-container" role="alert"></div>
+
+                <!-- Submit Button -->
+                <div class="form-actions">
+                    <button type="submit" id="generateBtn" class="btn-primary">
+                        Generate Bills
+                    </button>
+                </div>
+
+                <!-- Progress Indicator -->
+                <div id="progressContainer" class="progress-container hidden">
+                    <div class="progress-bar">
+                        <div id="progressBar" class="progress-fill"></div>
+                    </div>
+                    <p id="progressText" class="progress-text"></p>
+                </div>
+
+                <!-- Success Message -->
+                <div id="successMessage" class="success-container hidden" role="status"></div>
+            </form>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Fuel Bill Generator. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
