@@ -7,7 +7,7 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
 const { distributeAmount } = require('./utils/amountDistributor');
-const { generateRandomDateTime } = require('./utils/dateGenerator');
+const { generateUniqueDates } = require('./utils/dateGenerator');
 const { mergePDFsInDirectory } = require('./utils/pdfMerger');
 
 // URL of the fuel bill generator website
@@ -54,6 +54,11 @@ async function generateBills(params) {
         const amounts = distributeAmount(totalAmount, numberOfBills, maxAmountPerBill);
         console.log('Amount distribution:', amounts);
 
+        // Generate unique dates with 3-day minimum spacing
+        console.log('Generating unique dates with 3-day spacing...');
+        const uniqueDates = generateUniqueDates(numberOfBills, startDate, endDate, 3);
+        console.log('Dates generated successfully');
+
         // Launch browser
         browser = await puppeteer.launch({
             headless: true,
@@ -71,7 +76,7 @@ async function generateBills(params) {
                 fuelRate,
                 template,
                 amount: amounts[i],
-                ...generateRandomDateTime(startDate, endDate)
+                ...uniqueDates[i]  // Use pre-generated unique date
             };
 
             // Retry logic

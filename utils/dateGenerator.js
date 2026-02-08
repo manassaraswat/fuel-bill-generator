@@ -123,10 +123,106 @@ function generateRandomDateTime(startDate, endDate) {
     };
 }
 
+/**
+ * Generates multiple unique dates with minimum spacing between them
+ * @param {number} count - Number of dates to generate
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} minDaysApart - Minimum days between dates (default: 3)
+ * @returns {Array<Object>} Array of date-time objects
+ */
+function generateUniqueDates(count, startDate, endDate, minDaysApart = 3) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Validate inputs
+    if (isNaN(start.getTime())) {
+        throw new Error('Invalid start date');
+    }
+
+    if (isNaN(end.getTime())) {
+        throw new Error('Invalid end date');
+    }
+
+    if (end < start) {
+        throw new Error('End date cannot be before start date');
+    }
+
+    // Calculate total days in range
+    const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Check if range can accommodate required spacing
+    const minRequiredDays = (count - 1) * minDaysApart;
+    if (totalDays < minRequiredDays) {
+        throw new Error(
+            `Date range is too small. Need at least ${minRequiredDays + 1} days for ${count} bills with ${minDaysApart}-day spacing. Current range: ${totalDays + 1} days.`
+        );
+    }
+
+    const dates = [];
+    const usedDates = new Set();
+    let attempts = 0;
+    const maxAttempts = count * 100; // Prevent infinite loops
+
+    while (dates.length < count && attempts < maxAttempts) {
+        attempts++;
+
+        // Generate a random date
+        const randomDate = generateRandomDate(startDate, endDate);
+
+        // Check if this date is unique and properly spaced
+        if (!usedDates.has(randomDate) && isDateProperlySpaced(randomDate, dates, minDaysApart)) {
+            const time = generateRandomTime();
+            dates.push({
+                date: randomDate,
+                time,
+                dateFormatted: formatDateForDisplay(randomDate),
+                timeFormatted: formatTimeForDisplay(time)
+            });
+            usedDates.add(randomDate);
+        }
+    }
+
+    if (dates.length < count) {
+        throw new Error(
+            `Could not generate ${count} unique dates with ${minDaysApart}-day spacing in the given range after ${maxAttempts} attempts.`
+        );
+    }
+
+    // Sort dates chronologically
+    dates.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return dates;
+}
+
+/**
+ * Checks if a date is properly spaced from existing dates
+ * @param {string} newDate - Date to check in YYYY-MM-DD format
+ * @param {Array<Object>} existingDates - Array of existing date objects
+ * @param {number} minDaysApart - Minimum days required between dates
+ * @returns {boolean} True if properly spaced, false otherwise
+ */
+function isDateProperlySpaced(newDate, existingDates, minDaysApart) {
+    const newDateTime = new Date(newDate).getTime();
+    const minMilliseconds = minDaysApart * 24 * 60 * 60 * 1000;
+
+    for (const dateObj of existingDates) {
+        const existingDateTime = new Date(dateObj.date).getTime();
+        const difference = Math.abs(newDateTime - existingDateTime);
+
+        if (difference < minMilliseconds) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 module.exports = {
     generateRandomDate,
     generateRandomTime,
     formatDateForDisplay,
     formatTimeForDisplay,
-    generateRandomDateTime
+    generateRandomDateTime,
+    generateUniqueDates
 };

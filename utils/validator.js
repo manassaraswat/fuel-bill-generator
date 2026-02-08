@@ -75,6 +75,18 @@ function validateBillGenerationData(data) {
         errors.push(dateError);
     }
 
+    // Validate date range can accommodate required spacing
+    if (!dateError && !numberOfBillsError) {
+        const dateRangeError = validateDateRangeCapacity(
+            startDate,
+            endDate,
+            numberOfBills
+        );
+        if (dateRangeError) {
+            errors.push(dateRangeError);
+        }
+    }
+
     return {
         isValid: errors.length === 0,
         errors
@@ -241,6 +253,17 @@ function validateDates(startDate, endDate) {
         return 'End Date is required';
     }
 
+    // Validate date format (YYYY-MM-DD)
+    const dateFormatRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (!dateFormatRegex.test(startDate)) {
+        return 'Start Date must be in YYYY-MM-DD format';
+    }
+
+    if (!dateFormatRegex.test(endDate)) {
+        return 'End Date must be in YYYY-MM-DD format';
+    }
+
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -252,8 +275,47 @@ function validateDates(startDate, endDate) {
         return 'End Date is invalid';
     }
 
+    // Additional check: ensure the parsed date matches the input
+    // This catches cases like 2026-02-30 (invalid day)
+    const startFormatted = start.toISOString().split('T')[0];
+    const endFormatted = end.toISOString().split('T')[0];
+
+    if (startFormatted !== startDate) {
+        return 'Start Date is not a valid calendar date';
+    }
+
+    if (endFormatted !== endDate) {
+        return 'End Date is not a valid calendar date';
+    }
+
     if (end < start) {
         return 'End Date cannot be before Start Date';
+    }
+
+    return null;
+}
+
+/**
+ * Validates that date range can accommodate bills with required spacing
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {number} numberOfBills - Number of bills to generate
+ * @param {number} minDaysApart - Minimum days between bills (default: 3)
+ * @returns {string|null} Error message or null if valid
+ */
+function validateDateRangeCapacity(startDate, endDate, numberOfBills, minDaysApart = 3) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const count = parseInt(numberOfBills);
+
+    // Calculate total days in range
+    const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Calculate minimum required days for the spacing
+    const minRequiredDays = (count - 1) * minDaysApart;
+
+    if (totalDays < minRequiredDays) {
+        return `Date range is too small. Need at least ${minRequiredDays + 1} days for ${count} bills with ${minDaysApart}-day spacing between bills. Current range: ${totalDays + 1} days. Please extend your date range or reduce the number of bills.`;
     }
 
     return null;
@@ -268,5 +330,6 @@ module.exports = {
     validateNumberOfBills,
     validateMaxAmountPerBill,
     validateDistributionPossible,
-    validateDates
+    validateDates,
+    validateDateRangeCapacity
 };

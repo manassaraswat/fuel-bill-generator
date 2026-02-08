@@ -18,7 +18,7 @@ fi
 
 # Start the server
 echo "✅ Server starting on http://localhost:3000"
-echo "🌐 Opening browser..."
+echo "🌐 Opening browser..."    
 echo ""
 echo "Press Ctrl+C to stop the server"
 echo "----------------------------------------"
