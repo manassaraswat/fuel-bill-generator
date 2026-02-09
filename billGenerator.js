@@ -10,6 +10,7 @@ const { distributeAmount } = require('./utils/amountDistributor');
 const { generateUniqueDates } = require('./utils/dateGenerator');
 const { mergePDFsInDirectory } = require('./utils/pdfMerger');
 
+
 // URL of the fuel bill generator website
 const FUEL_BILL_URL = 'https://freeforonline.com/fuel-bills/index.html';
 
@@ -56,7 +57,17 @@ async function generateBills(params) {
 
         // Generate unique dates with 3-day minimum spacing
         console.log('Generating unique dates with 3-day spacing...');
+        console.log(`Date range: ${startDate} to ${endDate}`);
         const uniqueDates = generateUniqueDates(numberOfBills, startDate, endDate, 3);
+        // Verify all dates are unique
+        const dateSet = new Set(uniqueDates.map(d => d.date));
+        if (dateSet.size !== uniqueDates.length) {
+            console.error('ERROR: Duplicate dates detected!', {
+                uniqueCount: dateSet.size,
+                totalCount: uniqueDates.length,
+                dates: uniqueDates.map(d => d.date)
+            });
+        }
         console.log('Dates generated successfully');
 
         // Launch browser
@@ -71,12 +82,26 @@ async function generateBills(params) {
         for (let i = 0; i < numberOfBills; i++) {
             console.log(`\nGenerating bill ${i + 1} of ${numberOfBills}...`);
 
+            // Ensure we have a valid date object from uniqueDates
+            if (!uniqueDates[i] || !uniqueDates[i].date) {
+                throw new Error(`Missing date for bill ${i + 1}. Generated ${uniqueDates.length} dates for ${numberOfBills} bills.`);
+            }
+            
+            // Validate date format before using it
+            const dateToUse = String(uniqueDates[i].date).trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateToUse)) {
+                throw new Error(`Invalid date format for bill ${i + 1}: "${dateToUse}". Expected YYYY-MM-DD format.`);
+            }
+            
             const billData = {
                 stationName,
                 fuelRate,
                 template,
                 amount: amounts[i],
-                ...uniqueDates[i]  // Use pre-generated unique date
+                date: dateToUse,  // Explicitly set date as string
+                time: uniqueDates[i].time,
+                dateFormatted: uniqueDates[i].dateFormatted,
+                timeFormatted: uniqueDates[i].timeFormatted
             };
 
             // Retry logic
@@ -188,6 +213,28 @@ async function generateSingleBill(browser, billData, billNumber) {
         // Fill in the form fields
         await fillBillForm(page, billData);
 
+        // Verify date field value before generating PDF and ensure it's properly committed
+        await page.focus('#fs-date');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await page.keyboard.press('Tab'); // Blur the field to trigger any validation/processing
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        const dateBeforePDF = await page.$eval('#fs-date', el => el.value).catch(() => null);
+        if (dateBeforePDF && dateBeforePDF !== billData.date) {
+            // Date was changed - fix it
+            await page.evaluate((dateValue) => {
+                const dateField = document.querySelector('#fs-date');
+                if (dateField) {
+                    dateField.value = String(dateValue);
+                    dateField.setAttribute('value', String(dateValue));
+                    ['focus', 'input', 'change', 'blur'].forEach(eventType => {
+                        dateField.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+                    });
+                }
+            }, billData.date);
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
         // Generate and download the bill
         const fileName = `fuel-bill-${String(billNumber).padStart(3, '0')}.pdf`;
         await downloadBill(page, fileName);
@@ -258,13 +305,115 @@ async function fillBillForm(page, billData) {
         await page.type('#fs-amount', String(billData.amount));
 
         // Fill date (format: YYYY-MM-DD)
-        await page.type('#fs-date', billData.date);
+        const dateValueToSet = String(billData.date).trim();
+        
+        // Validate date format
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValueToSet)) {
+            throw new Error(`Invalid date format: "${dateValueToSet}". Expected YYYY-MM-DD format.`);
+        }
+        
+        // Clear the field completely first - use multiple methods
+        await page.evaluate(() => {
+            const dateField = document.querySelector('#fs-date');
+            if (dateField) {
+                dateField.value = '';
+                dateField.removeAttribute('value');
+                dateField.blur();
+            }
+        });
+        await page.focus('#fs-date');
+        // Select all and delete to ensure it's cleared
+        await page.keyboard.down('Control');
+        await page.keyboard.press('KeyA');
+        await page.keyboard.up('Control');
+        await page.keyboard.press('Delete');
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // Set the date using the most reliable method for HTML5 date inputs
+        await page.evaluate((dateValue) => {
+            const dateField = document.querySelector('#fs-date');
+            if (!dateField) {
+                throw new Error('Date field #fs-date not found');
+            }
+            
+            const dateStr = String(dateValue).trim();
+            dateField.value = dateStr;
+            dateField.setAttribute('value', dateStr);
+            dateField.focus();
+            
+            // Trigger events in the correct order
+            ['focus', 'input', 'change', 'blur'].forEach(eventType => {
+                const event = new Event(eventType, { 
+                    bubbles: true, 
+                    cancelable: true,
+                    composed: true
+                });
+                dateField.dispatchEvent(event);
+            });
+        }, dateValueToSet);
+        
+        // Wait for website JavaScript to process
+        await new Promise(resolve => setTimeout(resolve, 400));
+        
+        // Verify the value was set correctly
+        let finalValue = await page.$eval('#fs-date', el => el.value).catch(() => null);
+        let attempts = 0;
+        while (finalValue !== dateValueToSet && attempts < 3 && finalValue) {
+            // Try setting it again
+            await page.evaluate((dateValue) => {
+                const dateField = document.querySelector('#fs-date');
+                if (dateField) {
+                    dateField.value = String(dateValue);
+                    dateField.setAttribute('value', String(dateValue));
+                    ['focus', 'input', 'change', 'blur'].forEach(eventType => {
+                        dateField.dispatchEvent(new Event(eventType, { bubbles: true, cancelable: true }));
+                    });
+                }
+            }, dateValueToSet);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            finalValue = await page.$eval('#fs-date', el => el.value).catch(() => null);
+            attempts++;
+        }
+        
+        if (finalValue && finalValue !== dateValueToSet) {
+            console.warn(`Warning: Date field value mismatch. Expected: "${dateValueToSet}", Got: "${finalValue}"`);
+        }
 
         // Fill time (format: HH:mm)
         await page.type('#fs-time', billData.time);
 
+        // Wait and verify date is still correct after filling other fields
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const dateAfterOtherFields = await page.$eval('#fs-date', el => el.value).catch(() => null);
+        if (dateAfterOtherFields && dateAfterOtherFields !== dateValueToSet) {
+            // Fix it
+            await page.evaluate((dateValue) => {
+                const dateField = document.querySelector('#fs-date');
+                if (dateField) {
+                    dateField.value = String(dateValue);
+                    dateField.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }, dateValueToSet);
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
         // Set payment type to "Online"
         await page.select('#u-payment-type', 'Online');
+        
+        // Wait and verify date after payment type selection
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const dateAfterPaymentType = await page.$eval('#fs-date', el => el.value).catch(() => null);
+        if (dateAfterPaymentType && dateAfterPaymentType !== dateValueToSet) {
+            // Fix it
+            await page.evaluate((dateValue) => {
+                const dateField = document.querySelector('#fs-date');
+                if (dateField) {
+                    dateField.value = String(dateValue);
+                    dateField.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }, dateValueToSet);
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
 
         // Leave vehicle number blank (as per requirements)
         // No action needed - field is already empty
@@ -293,6 +442,7 @@ async function downloadBill(page, fileName) {
     try {
         // Wait for download button to be available
         await page.waitForSelector('#download-fuel-bills', { timeout: ELEMENT_TIMEOUT });
+
 
         // Click the download button
         await page.click('#download-fuel-bills');

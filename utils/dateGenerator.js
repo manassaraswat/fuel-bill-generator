@@ -4,14 +4,37 @@
  */
 
 /**
+ * Parses a YYYY-MM-DD date string to a Date object using UTC to avoid timezone issues
+ * @param {string} dateStr - Date in YYYY-MM-DD format
+ * @returns {Date} Date object in UTC
+ */
+function parseDate(dateStr) {
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) {
+        throw new Error(`Invalid date format: ${dateStr}. Expected YYYY-MM-DD`);
+    }
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+    
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+        throw new Error(`Invalid date: ${dateStr}`);
+    }
+    
+    // Create date using UTC to avoid timezone issues
+    return new Date(Date.UTC(year, month - 1, day));
+}
+
+/**
  * Generates a random date between start and end dates
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
  * @returns {string} Random date in YYYY-MM-DD format
  */
 function generateRandomDate(startDate, endDate) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
 
     // Validate dates
     if (isNaN(start.getTime())) {
@@ -32,14 +55,44 @@ function generateRandomDate(startDate, endDate) {
     const randomTimestamp = startTimestamp + Math.random() * (endTimestamp - startTimestamp);
 
     // Create date from random timestamp
-    const randomDate = new Date(randomTimestamp);
+    // IMPORTANT: Use the original start/end dates to calculate day offset, then reconstruct
+    // This avoids any timezone issues with Date object conversion
+    const daysDiff = Math.floor((randomTimestamp - startTimestamp) / (1000 * 60 * 60 * 24));
+    
+    // Parse start date components
+    const startParts = startDate.split('-');
+    const startYear = parseInt(startParts[0], 10);
+    const startMonth = parseInt(startParts[1], 10);
+    const startDay = parseInt(startParts[2], 10);
+    
+    // Create a date object from start date and add days
+    const resultDate = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+    resultDate.setUTCDate(resultDate.getUTCDate() + daysDiff);
+    
+    // Extract components using UTC methods
+    const year = resultDate.getUTCFullYear();
+    const month = String(resultDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(resultDate.getUTCDate()).padStart(2, '0');
 
-    // Format as YYYY-MM-DD
-    const year = randomDate.getFullYear();
-    const month = String(randomDate.getMonth() + 1).padStart(2, '0');
-    const day = String(randomDate.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
+    const result = `${year}-${month}-${day}`;
+    
+    // Validate the result is in correct format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(result)) {
+        throw new Error(`Invalid date format generated: "${result}". Expected YYYY-MM-DD. Year: ${year}, Month: ${month}, Day: ${day}`);
+    }
+    
+    // Ensure year is reasonable (between 1900 and 2100)
+    if (year < 1900 || year > 2100) {
+        throw new Error(`Invalid year generated: ${year}. Date: ${result}`);
+    }
+    
+    // Ensure the result is within the original date range
+    const resultTimestamp = resultDate.getTime();
+    if (resultTimestamp < startTimestamp || resultTimestamp > endTimestamp) {
+        throw new Error(`Generated date ${result} is outside the range ${startDate} to ${endDate}`);
+    }
+    
+    return result;
 }
 
 /**
@@ -70,17 +123,28 @@ function generateRandomTime() {
  * @returns {string} Date in DD/MM/YYYY format
  */
 function formatDateForDisplay(dateStr) {
-    const date = new Date(dateStr);
+    // Parse YYYY-MM-DD format manually to avoid timezone issues
+    const parts = dateStr.split('-');
+    
+    if (parts.length !== 3) {
+        throw new Error('Invalid date format. Expected YYYY-MM-DD');
+    }
 
-    if (isNaN(date.getTime())) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+
+    // Validate the parsed values
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
         throw new Error('Invalid date');
     }
 
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
+    // Format as DD/MM/YYYY
+    const dayStr = String(day).padStart(2, '0');
+    const monthStr = String(month).padStart(2, '0');
+    const yearStr = String(year);
 
-    return `${day}/${month}/${year}`;
+    return `${dayStr}/${monthStr}/${yearStr}`;
 }
 
 /**
@@ -132,8 +196,8 @@ function generateRandomDateTime(startDate, endDate) {
  * @returns {Array<Object>} Array of date-time objects
  */
 function generateUniqueDates(count, startDate, endDate, minDaysApart = 3) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
 
     // Validate inputs
     if (isNaN(start.getTime())) {
@@ -173,12 +237,13 @@ function generateUniqueDates(count, startDate, endDate, minDaysApart = 3) {
         // Check if this date is unique and properly spaced
         if (!usedDates.has(randomDate) && isDateProperlySpaced(randomDate, dates, minDaysApart)) {
             const time = generateRandomTime();
-            dates.push({
+            const dateObj = {
                 date: randomDate,
                 time,
                 dateFormatted: formatDateForDisplay(randomDate),
                 timeFormatted: formatTimeForDisplay(time)
-            });
+            };
+            dates.push(dateObj);
             usedDates.add(randomDate);
         }
     }
@@ -189,8 +254,8 @@ function generateUniqueDates(count, startDate, endDate, minDaysApart = 3) {
         );
     }
 
-    // Sort dates chronologically
-    dates.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Sort dates chronologically using parseDate to avoid timezone issues
+    dates.sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
     return dates;
 }
@@ -203,11 +268,11 @@ function generateUniqueDates(count, startDate, endDate, minDaysApart = 3) {
  * @returns {boolean} True if properly spaced, false otherwise
  */
 function isDateProperlySpaced(newDate, existingDates, minDaysApart) {
-    const newDateTime = new Date(newDate).getTime();
+    const newDateTime = parseDate(newDate).getTime();
     const minMilliseconds = minDaysApart * 24 * 60 * 60 * 1000;
 
     for (const dateObj of existingDates) {
-        const existingDateTime = new Date(dateObj.date).getTime();
+        const existingDateTime = parseDate(dateObj.date).getTime();
         const difference = Math.abs(newDateTime - existingDateTime);
 
         if (difference < minMilliseconds) {
